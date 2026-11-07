@@ -6,7 +6,10 @@
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 20px; color: #333; }
         .pane { background: #f9f9f9; border: 1px solid #ddd; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
-        textarea { width: 100%; height: 150px; font-family: monospace; font-size: 14px; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        
+        /* Monaco Editor Container Size */
+        #editor-container { width: 100%; height: 300px; border: 1px solid #ccc; border-radius: 4px; overflow: hidden; }
+
         input[type="text"] { width: 70%; padding: 10px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; margin-right: 10px; box-sizing: border-box; }
         button { background: #2563eb; color: white; border: none; padding: 10px 20px; font-size: 14px; border-radius: 4px; cursor: pointer; }
         button:hover { background: #1d4ed8; }
@@ -21,7 +24,7 @@
     <!-- User Prompt Input Control -->
     <div class="pane">
         <label for="user-prompt-input"><strong>What kind of problem do you want?</strong></label><br><br>
-        <input type="text" id="user-prompt-input" value="Create a medium problem about finding duplicates in an array" placeholder="e.g., Write a tricky string manipulation problem...">
+        <input type="text" id="user-prompt-input" value="Create a simple problem about arrays" placeholder="e.g., Write a tricky string manipulation problem...">
         <button onclick="fetchNewProblem()">✨ Generate Problem</button>
     </div>
 
@@ -32,8 +35,9 @@
 
     <div class="pane">
         <h4>Your Code:</h4>
-        <textarea id="code-input" placeholder="Write your Python code here..."></textarea>
-        <br><br>
+        <!-- Monaco Editor Mount Point -->
+        <div id="editor-container"></div>
+        <br>
         <button onclick="runCode()">Run Code & Test</button>
     </div>
 
@@ -42,9 +46,23 @@
         <pre id="output">System idle. Generate a problem to begin.</pre>
     </div>
 
-    <script>
+    <!-- Load Monaco Editor via CDN Module -->
+    <script type="module">
+        import * as monaco from 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/+esm';
+
         let pyodideWorker = null;
         let currentProblemData = null;
+        let editor = null;
+
+        // Initialize Monaco Editor
+        editor = monaco.editor.create(document.getElementById('editor-container'), {
+            value: '# Generate a problem to load the starter code...',
+            language: 'python',
+            theme: 'vs-dark',
+            automaticLayout: true,
+            fontSize: 14,
+            minimap: { enabled: false }
+        });
 
         function initWorker() {
             if (pyodideWorker) pyodideWorker.terminate();
@@ -52,7 +70,8 @@
         }
         initWorker();
 
-        async function fetchNewProblem() {
+        // Expose functions globally so the HTML button onclick handlers can see them
+        window.fetchNewProblem = async function() {
             const userPrompt = document.getElementById("user-prompt-input").value;
             const outputEl = document.getElementById("output");
             
@@ -61,10 +80,7 @@
             document.getElementById("prob-desc").innerHTML = '<span class="loading">Crafting your custom coding challenge...</span>';
 
             try {
-                // Automatically switches to your Render URL when deployed, and localhost when testing locally
-                const API_BASE_URL = (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
-                    ? "http://127.0.0.1:8000" 
-                    : "https://litcodebackend.onrender.com"; // Replace later with your real Render URL
+                const API_BASE_URL = "https://litcodebackend.onrender.com";
 
                 const url = `${API_BASE_URL}/api/generate-problem?user_prompt=${encodeURIComponent(userPrompt)}`;
                 const response = await fetch(url);
@@ -73,23 +89,24 @@
                 
                 currentProblemData = await response.json();
 
-                // Render onto UI
+                // Render onto UI and update Monaco Editor value
                 document.getElementById("prob-title").innerText = currentProblemData.title;
                 document.getElementById("prob-desc").innerHTML = currentProblemData.description;
-                document.getElementById("code-input").value = currentProblemData.starter_code;
+                editor.setValue(currentProblemData.starter_code);
                 outputEl.innerText = "Problem loaded successfully. Ready to test!";
             } catch (err) {
                 outputEl.innerText = "Error connecting to backend: " + err.message;
             }
-        }
+        };
 
-        function runCode() {
+        window.runCode = function() {
             if (!currentProblemData) {
                 alert("Please generate a problem first!");
                 return;
             }
 
-            const userCode = document.getElementById("code-input").value;
+            // Get code directly from Monaco Editor instead of textarea
+            const userCode = editor.getValue();
             const outputEl = document.getElementById("output");
             outputEl.innerText = "Running tests against reference solution in browser...";
 
@@ -120,7 +137,7 @@
                 referenceSolution: currentProblemData.reference_solution,
                 testInputs: currentProblemData.test_inputs
             });
-        }
+        };
     </script>
 </body>
 </html>

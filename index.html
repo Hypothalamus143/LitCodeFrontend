@@ -64,7 +64,7 @@
                 // Automatically switches to your Render URL when deployed, and localhost when testing locally
                 const API_BASE_URL = (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
                     ? "http://127.0.0.1:8000" 
-                    : "https://litcodebackend.onrender.com/"; // Replace later with your real Render URL
+                    : "https://litcodebackend.onrender.com"; // Replace later with your real Render URL
 
                 const url = `${API_BASE_URL}/api/generate-problem?user_prompt=${encodeURIComponent(userPrompt)}`;
                 const response = await fetch(url);

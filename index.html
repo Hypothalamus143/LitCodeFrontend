@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>AI Mini-LeetCode Prototype</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 20px; color: #333; }
+        .pane { background: #f9f9f9; border: 1px solid #ddd; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+        textarea { width: 100%; height: 150px; font-family: monospace; font-size: 14px; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        input[type="text"] { width: 70%; padding: 10px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; margin-right: 10px; box-sizing: border-box; }
+        button { background: #2563eb; color: white; border: none; padding: 10px 20px; font-size: 14px; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #1d4ed8; }
+        pre { background: #1e1e1e; color: #d4d4d4; padding: 15px; border-radius: 4px; overflow-x: auto; font-family: monospace; }
+        .loading { color: #666; font-style: italic; }
+    </style>
+</head>
+<body>
+
+    <h1>AI Mini-LeetCode</h1>
+    
+    <!-- User Prompt Input Control -->
+    <div class="pane">
+        <label for="user-prompt-input"><strong>What kind of problem do you want?</strong></label><br><br>
+        <input type="text" id="user-prompt-input" value="Create a medium problem about finding duplicates in an array" placeholder="e.g., Write a tricky string manipulation problem...">
+        <button onclick="fetchNewProblem()">✨ Generate Problem</button>
+    </div>
+
+    <div class="pane">
+        <h3 id="prob-title">Click 'Generate Problem' to start</h3>
+        <div id="prob-desc">Your problem description will appear here...</div>
+    </div>
+
+    <div class="pane">
+        <h4>Your Code:</h4>
+        <textarea id="code-input" placeholder="Write your Python code here..."></textarea>
+        <br><br>
+        <button onclick="runCode()">Run Code & Test</button>
+    </div>
+
+    <div class="pane">
+        <h4>Output / Test Results:</h4>
+        <pre id="output">System idle. Generate a problem to begin.</pre>
+    </div>
+
+    <script>
+        let pyodideWorker = null;
+        let currentProblemData = null;
+
+        function initWorker() {
+            if (pyodideWorker) pyodideWorker.terminate();
+            pyodideWorker = new Worker('python-worker.js');
+        }
+        initWorker();
+
+        async function fetchNewProblem() {
+            const userPrompt = document.getElementById("user-prompt-input").value;
+            const outputEl = document.getElementById("output");
+            
+            outputEl.innerText = "Calling Gemini with your custom prompt...";
+            document.getElementById("prob-title").innerText = "Generating...";
+            document.getElementById("prob-desc").innerHTML = '<span class="loading">Crafting your custom coding challenge...</span>';
+
+            try {
+                // Automatically switches to your Render URL when deployed, and localhost when testing locally
+                const API_BASE_URL = (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
+                    ? "http://127.0.0.1:8000" 
+                    : "https://litcodebackend.onrender.com/"; // Replace later with your real Render URL
+
+                const url = `${API_BASE_URL}/api/generate-problem?user_prompt=${encodeURIComponent(userPrompt)}`;
+                const response = await fetch(url);
+                
+                if (!response.ok) throw new Error("Failed to fetch from backend");
+                
+                currentProblemData = await response.json();
+
+                // Render onto UI
+                document.getElementById("prob-title").innerText = currentProblemData.title;
+                document.getElementById("prob-desc").innerHTML = currentProblemData.description;
+                document.getElementById("code-input").value = currentProblemData.starter_code;
+                outputEl.innerText = "Problem loaded successfully. Ready to test!";
+            } catch (err) {
+                outputEl.innerText = "Error connecting to backend: " + err.message;
+            }
+        }
+
+        function runCode() {
+            if (!currentProblemData) {
+                alert("Please generate a problem first!");
+                return;
+            }
+
+            const userCode = document.getElementById("code-input").value;
+            const outputEl = document.getElementById("output");
+            outputEl.innerText = "Running tests against reference solution in browser...";
+
+            const TIMEOUT_MS = 3000;
+            const safetyTimer = setTimeout(() => {
+                pyodideWorker.terminate();
+                initWorker();
+                outputEl.innerText = "❌ Time Limit Exceeded (Possible infinite loop detected)";
+            }, TIMEOUT_MS);
+
+            pyodideWorker.onmessage = (e) => {
+                clearTimeout(safetyTimer);
+                if (e.data.success) {
+                    const res = e.data.data;
+                    if (res.passed) {
+                        outputEl.innerText = "🎉 SUCCESS! All test cases passed:\n\n" + JSON.stringify(res.results, null, 2);
+                    } else {
+                        outputEl.innerText = "❌ FAILED Test Cases:\n\n" + JSON.stringify(res.results, null, 2);
+                    }
+                } else {
+                    outputEl.innerText = "❌ Python Execution Error:\n" + e.data.error;
+                }
+            };
+
+            pyodideWorker.postMessage({
+                userCode: userCode,
+                functionName: currentProblemData.function_name,
+                referenceSolution: currentProblemData.reference_solution,
+                testInputs: currentProblemData.test_inputs
+            });
+        }
+    </script>
+</body>
+</html>
